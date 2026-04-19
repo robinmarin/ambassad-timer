@@ -1,9 +1,9 @@
-import type { Config } from "./config";
+import type { Config } from "../config";
 
 jest.mock("puppeteer-extra");
 jest.mock("puppeteer-extra-plugin-stealth");
-jest.mock("./detector");
-jest.mock("./notifier");
+jest.mock("../detector");
+jest.mock("../notifier");
 jest.mock("fs");
 jest.mock("path");
 
@@ -64,12 +64,12 @@ describe("booker.ts", () => {
         default: jest.fn(),
       }));
 
-      jest.doMock("./detector", () => ({
+      jest.doMock("../detector", () => ({
         detectAvailableSlot: jest.fn().mockResolvedValue("a.slot"),
         hasNoSlotsMessage: jest.fn().mockResolvedValue(false),
       }));
 
-      const { attemptBooking } = require("./booker");
+      const { attemptBooking } = require("../booker");
       const result = await attemptBooking(mockConfig);
 
       expect(result.status).toBe("booked");
@@ -109,12 +109,12 @@ describe("booker.ts", () => {
         default: jest.fn(),
       }));
 
-      jest.doMock("./detector", () => ({
+      jest.doMock("../detector", () => ({
         detectAvailableSlot: jest.fn().mockResolvedValue(null),
         hasNoSlotsMessage: jest.fn().mockResolvedValue(false),
       }));
 
-      const { attemptBooking } = require("./booker");
+      const { attemptBooking } = require("../booker");
       const result = await attemptBooking(mockConfig);
 
       expect(result.status).toBe("no_slots");
@@ -139,12 +139,12 @@ describe("booker.ts", () => {
         default: jest.fn(),
       }));
 
-      jest.doMock("./detector", () => ({
+      jest.doMock("../detector", () => ({
         detectAvailableSlot: jest.fn(),
         hasNoSlotsMessage: jest.fn(),
       }));
 
-      const { attemptBooking } = require("./booker");
+      const { attemptBooking } = require("../booker");
       const result = await attemptBooking(mockConfig);
 
       expect(result.status).toBe("error");

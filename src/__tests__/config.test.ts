@@ -1,38 +1,63 @@
 import fs from "fs";
 import path from "path";
-import { loadConfig } from "../config";
+import { loadConfig, Config } from "../config";
 
 jest.mock("fs");
+jest.mock("path");
 
-const mockFs = fs as jest.Mocked<typeof fs>;
+describe("config.ts", () => {
+  const mockConfig: Config = {
+    personal: {
+      firstName: "John",
+      lastName: "Doe",
+      personnummer: "198001011234",
+      email: "john@example.com",
+      phone: "+46123456789",
+    },
+    notification: {
+      telegram: { botToken: "123:ABC", chatId: "456" },
+    },
+    booking: {
+      unitCode: "UNIT123",
+      appointmentType: "type",
+      numberOfPeople: 1,
+    },
+    polling: {
+      sniperIntervalSec: 30,
+      normalIntervalMin: 5,
+      sniperWindowStartHour: 9,
+      sniperWindowEndHour: 17,
+      sniperDayOfWeek: 3,
+    },
+  };
 
-const validConfig = {
-  personal: { firstName: "A", lastName: "B", personnummer: "19900101-1234", email: "a@b.com", phone: "+441234" },
-  notification: { telegram: { botToken: "123:ABC", chatId: "456" } },
-  booking: { unitCode: "U0586", appointmentType: "samordningsnummer", numberOfPeople: 1 },
-  polling: { sniperIntervalSec: 25, normalIntervalMin: 10, sniperWindowStartHour: 9, sniperWindowEndHour: 11, sniperDayOfWeek: 3 },
-};
+  describe("loadConfig", () => {
+    it("throws error when config.json does not exist", () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(false);
+      (path.resolve as jest.Mock).mockReturnValue("/test/config.json");
 
-describe("loadConfig", () => {
-  it("throws when config.json does not exist", () => {
-    mockFs.existsSync.mockReturnValue(false);
-    expect(() => loadConfig()).toThrow("config.json not found");
-  });
+      expect(() => loadConfig()).toThrow(
+        "config.json not found. Copy config.example.json to config.json and fill in your details."
+      );
+    });
 
-  it("parses and returns config when file exists", () => {
-    mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(validConfig));
-    const config = loadConfig();
-    expect(config.booking.unitCode).toBe("U0586");
-    expect(config.polling.sniperDayOfWeek).toBe(3);
-  });
+    it("returns Config when config.json exists", () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (path.resolve as jest.Mock).mockReturnValue("/test/config.json");
+      (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify(mockConfig));
 
-  it("resolves config path relative to cwd", () => {
-    mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(validConfig));
-    loadConfig();
-    expect(mockFs.existsSync).toHaveBeenCalledWith(
-      path.resolve(process.cwd(), "config.json")
-    );
+      const result = loadConfig();
+
+      expect(result).toEqual(mockConfig);
+      expect(fs.readFileSync).toHaveBeenCalledWith("/test/config.json", "utf-8");
+    });
+
+    it("throws when config.json is empty", () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (path.resolve as jest.Mock).mockReturnValue("/test/config.json");
+      (fs.readFileSync as jest.Mock).mockReturnValue("");
+
+      expect(() => loadConfig()).toThrow();
+    });
   });
 });

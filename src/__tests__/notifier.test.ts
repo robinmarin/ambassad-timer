@@ -1,7 +1,7 @@
 import https from "https";
 import fs from "fs";
-import { notify } from "./notifier";
-import type { Config } from "./config";
+import { notify } from "../notifier";
+import type { Config } from "../config";
 
 jest.mock("https");
 jest.mock("fs");
