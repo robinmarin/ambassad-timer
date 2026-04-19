@@ -1,9 +1,15 @@
 import { loadConfig } from "./config";
 import { startScheduler } from "./scheduler";
 
-const config = loadConfig();
-console.log("ambassad-timer starting up...");
-console.log(`Targeting unit: ${config.booking.unitCode} (Swedish Embassy London)`);
-console.log(`Sniper window: Wednesday ${config.polling.sniperWindowStartHour}:00–${config.polling.sniperWindowEndHour}:00`);
+function main() {
+  const config = loadConfig();
+  console.log("ambassad-timer starting up...");
+  console.log(`Targeting unit: ${config.booking.unitCode} (Swedish Embassy London)`);
+  console.log(`Sniper window: Wednesday ${config.polling.sniperWindowStartHour}:00–${config.polling.sniperWindowEndHour}:00`);
+  startScheduler(config);
+}
 
-startScheduler(config);
+// Only run when executed directly, not when imported by tests
+if (require.main === module) {
+  main();
+}
