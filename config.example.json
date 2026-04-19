@@ -1,0 +1,30 @@
+{
+  "personal": {
+    "firstName": "",
+    "lastName": "",
+    "personnummer": "",
+    "email": "",
+    "phone": ""
+  },
+  "notification": {
+    "smtp": {
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "user": "",
+      "pass": ""
+    },
+    "to": ""
+  },
+  "booking": {
+    "unitCode": "U0586",
+    "appointmentType": "samordningsnummer",
+    "numberOfPeople": 1
+  },
+  "polling": {
+    "sniperIntervalSec": 25,
+    "normalIntervalMin": 10,
+    "sniperWindowStartHour": 9,
+    "sniperWindowEndHour": 11,
+    "sniperDayOfWeek": 3
+  }
+}
