@@ -4,14 +4,14 @@
     "module": "commonjs",
     "moduleResolution": "node10",
     "ignoreDeprecations": "6.0",
-    "rootDir": "src",
     "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "sourceMap": true,
     "declaration": true,
-    "types": ["node"]
+    "types": ["node", "jest"],
+    "baseUrl": "."
   },
-  "include": ["src"]
+  "include": ["src", "src/__tests__"]
 }
