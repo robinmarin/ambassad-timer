@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import notifier from "node-notifier";
-import type { Config } from "./config.js";
+import type { Config } from "./config";
 
 export async function notify(
   config: Config,

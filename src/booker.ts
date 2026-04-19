@@ -2,9 +2,9 @@ import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import path from "path";
 import fs from "fs";
-import type { Config } from "./config.js";
-import { detectAvailableSlot, hasNoSlotsMessage } from "./detector.js";
-import { notify } from "./notifier.js";
+import type { Config } from "./config";
+import { detectAvailableSlot, hasNoSlotsMessage } from "./detector";
+import { notify } from "./notifier";
 
 puppeteer.use(StealthPlugin());
 

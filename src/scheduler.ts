@@ -1,6 +1,6 @@
 import cron from "node-cron";
-import type { Config } from "./config.js";
-import { attemptBooking } from "./booker.js";
+import type { Config } from "./config";
+import { attemptBooking } from "./booker";
 
 let running = false;
 

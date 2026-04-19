@@ -1,5 +1,5 @@
-import { loadConfig } from "./config.js";
-import { startScheduler } from "./scheduler.js";
+import { loadConfig } from "./config";
+import { startScheduler } from "./scheduler";
 
 const config = loadConfig();
 console.log("ambassad-timer starting up...");
