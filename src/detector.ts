@@ -10,26 +10,36 @@ export async function detectAvailableSlot(
   // Wicket renders the calendar as a table; available dates are clickable links,
   // disabled dates are plain text or have a "disabled" class.
   // We look for any <a> or <td> that is NOT marked disabled and contains a date number.
-  const selector = await page.evaluate(() => {
-    // Try common patterns used by the Migrationsverket Wicket calendar
-    const candidates = Array.from(
-      document.querySelectorAll(
-        "td.wicket-datepicker-day:not(.wicket-datepicker-disabled) a, " +
-        "td[class*='day']:not([class*='disabled']) a, " +
-        "td.available a, " +
-        "td:not(.disabled):not(.empty) a[href*='wicket']"
-      )
-    );
-    if (candidates.length === 0) return null;
+  const result = await page.evaluate(() => {
+    const query =
+      "td.wicket-datepicker-day:not(.wicket-datepicker-disabled) a, " +
+      "td[class*='day']:not([class*='disabled']) a, " +
+      "td.available a, " +
+      "td:not(.disabled):not(.empty) a[href*='wicket']";
+    const candidates = Array.from(document.querySelectorAll(query));
+    const debugInfo = {
+      count: candidates.length,
+      firstHtml: candidates[0]?.outerHTML ?? null,
+    };
+    if (candidates.length === 0) return { selector: null, debugInfo };
     const el = candidates[0] as HTMLElement;
-    // Build a unique enough selector using the element's id or text
-    if (el.id) return `#${el.id}`;
-    const text = el.textContent?.trim();
-    if (text) return `a[href*='wicket']:has-text("${text}")`;
-    return null;
+    let selector: string | null = null;
+    if (el.id) selector = `#${el.id}`;
+    else {
+      const text = el.textContent?.trim();
+      if (text) selector = `a[href*='wicket']:has-text("${text}")`;
+    }
+    return { selector, debugInfo };
   });
 
-  return selector;
+  console.log(
+    `[detector] Calendar scan: ${result.debugInfo.count} candidate(s) found`
+  );
+  if (result.debugInfo.firstHtml) {
+    console.log(`[detector] First candidate: ${result.debugInfo.firstHtml}`);
+  }
+
+  return result.selector;
 }
 
 /**

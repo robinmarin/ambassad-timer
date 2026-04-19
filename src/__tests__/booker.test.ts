@@ -27,9 +27,12 @@ const mockConfig: Config = {
 };
 
 describe("booker.ts", () => {
+  beforeEach(() => {
+    jest.resetModules();
+  });
+
   afterEach(() => {
     jest.restoreAllMocks();
-    jest.resetModules();
   });
 
   describe("attemptBooking", () => {
@@ -48,10 +51,13 @@ describe("booker.ts", () => {
               waitForSelector: jest.fn().mockResolvedValue(undefined),
               select: jest.fn().mockResolvedValue(undefined),
               $: jest.fn().mockResolvedValue(null),
+              $eval: jest.fn().mockResolvedValue("U0586"),
               evaluate: jest.fn().mockResolvedValue("ABC123XYZ"),
               click: jest.fn().mockResolvedValue(undefined),
               waitForNavigation: jest.fn().mockResolvedValue(undefined),
+              waitForNetworkIdle: jest.fn().mockResolvedValue(undefined),
               screenshot: jest.fn().mockResolvedValue(undefined),
+              url: jest.fn().mockReturnValue("https://www.migrationsverket.se/ansokanbokning/"),
             }),
             close: jest.fn().mockResolvedValue(undefined),
           }),
@@ -94,9 +100,13 @@ describe("booker.ts", () => {
               waitForSelector: jest.fn().mockResolvedValue(undefined),
               select: jest.fn().mockResolvedValue(undefined),
               $: jest.fn().mockResolvedValue(null),
-              evaluate: jest.fn().mockResolvedValue(""),
+              $eval: jest.fn().mockResolvedValue("U0586"),
+              evaluate: jest.fn().mockResolvedValue([]),
               click: jest.fn().mockResolvedValue(undefined),
               waitForNavigation: jest.fn().mockResolvedValue(undefined),
+              waitForNetworkIdle: jest.fn().mockResolvedValue(undefined),
+              screenshot: jest.fn().mockResolvedValue(undefined),
+              url: jest.fn().mockReturnValue("https://www.migrationsverket.se/ansokanbokning/"),
             }),
             close: jest.fn().mockResolvedValue(undefined),
           }),
@@ -123,6 +133,8 @@ describe("booker.ts", () => {
     });
 
     it("returns error when browser operations fail", async () => {
+      const consoleSpy = jest.spyOn(console, "error").mockImplementation();
+
       jest.doMock("puppeteer-extra", () => ({
         __esModule: true,
         default: {
@@ -151,6 +163,8 @@ describe("booker.ts", () => {
       if (result.status === "error") {
         expect(result.message).toBe("Page error");
       }
+
+      consoleSpy.mockRestore();
     });
   });
 });

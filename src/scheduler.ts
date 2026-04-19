@@ -57,12 +57,26 @@ export function startScheduler(config: Config): void {
   let nextPollAt = Date.now();
 
   cron.schedule("* * * * *", async () => {
-    if (Date.now() < nextPollAt) return;
-    if (isNightTime()) {
-      nextPollAt = Date.now() + jitter(30 * 60 * 1000); // check again in ~30min
-      console.log("[scheduler] Night time — skipping.");
+    const now = new Date();
+    const waitSec = Math.round((nextPollAt - Date.now()) / 1000);
+
+    if (Date.now() < nextPollAt) {
+      console.log(
+        `[scheduler] tick ${now.toISOString()} — waiting ${waitSec}s until next poll`
+      );
       return;
     }
+
+    if (isNightTime()) {
+      nextPollAt = Date.now() + jitter(30 * 60 * 1000); // check again in ~30min
+      console.log(
+        `[scheduler] ${now.toISOString()} — night time, next check in ~30min`
+      );
+      return;
+    }
+
+    const mode = inSniperWindow(config) ? "SNIPER" : "normal";
+    console.log(`[scheduler] [${mode}] ${now.toISOString()} — firing poll`);
 
     const booked = await poll(config);
     if (booked) {
@@ -76,7 +90,6 @@ export function startScheduler(config: Config): void {
 
     nextPollAt = Date.now() + jitter(intervalMs);
 
-    const mode = inSniperWindow(config) ? "SNIPER" : "normal";
     console.log(
       `[scheduler] [${mode}] Next poll in ${Math.round((nextPollAt - Date.now()) / 1000)}s`
     );

@@ -1,5 +1,6 @@
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import type { Page } from "puppeteer";
 import path from "path";
 import fs from "fs";
 import type { Config } from "./config";
@@ -15,6 +16,73 @@ export type BookingResult =
   | { status: "booked"; reference: string; screenshotPath: string }
   | { status: "no_slots" }
   | { status: "error"; message: string };
+
+/**
+ * Set a <select> value and trigger Wicket's AJAX behaviour.
+ *
+ * Puppeteer's page.select() dispatches change/input events on the
+ * element, but Wicket often binds its AJAX behaviours via its own
+ * event system (Wicket.Event) or inline onchange attributes.  When
+ * Wicket replaces DOM nodes after an AJAX round-trip the listeners
+ * set up by Puppeteer may no longer match. This helper:
+ *
+ *  1. Sets the value directly on the HTMLSelectElement
+ *  2. Fires both 'change' and 'input' events (bubbling)
+ *  3. If the element has an inline onchange handler, invokes it
+ *  4. Falls back to calling any Wicket.Ajax.ajax() call found in
+ *     the element's attributes.
+ *
+ * After triggering we wait for the Wicket AJAX round-trip to settle.
+ */
+async function wicketSelect(page: Page, selector: string, value: string): Promise<void> {
+  await page.evaluate(
+    (sel: string, val: string) => {
+      const el = document.querySelector(sel) as HTMLSelectElement | null;
+      if (!el) throw new Error(`wicketSelect: element not found: ${sel}`);
+
+      // Set the value
+      el.value = val;
+
+      // Dispatch native events so any listener picks it up
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+
+      // Wicket inline onchange — e.g. onchange="var wcall=wicketAjaxPost(…)"
+      if (typeof el.onchange === "function") {
+        el.onchange(new Event("change"));
+      }
+    },
+    selector,
+    value
+  );
+
+  // Wait for the Wicket AJAX round-trip to complete
+  await page.waitForNetworkIdle({ timeout: 10000 }).catch(() => {});
+  // Extra settle time for Wicket DOM replacement
+  await new Promise((r) => setTimeout(r, 500));
+}
+
+/**
+ * Re-query the DOM for all <select> elements and their options.
+ * Call this after every Wicket AJAX round-trip because Wicket may
+ * have replaced DOM nodes.
+ */
+async function dumpSelects(page: Page, label: string) {
+  const info = await page.evaluate(() => {
+    return Array.from(document.querySelectorAll("select")).map((s) => ({
+      id: s.id,
+      name: s.name,
+      value: s.value,
+      options: Array.from(s.options).map((o) => ({
+        value: o.value,
+        text: o.text.trim(),
+        selected: o.selected,
+      })),
+    }));
+  });
+  console.log(`[booker] ${label}:`, JSON.stringify(info, null, 2));
+  return info;
+}
 
 export async function attemptBooking(config: Config): Promise<BookingResult> {
   const browser = await puppeteer.launch({
@@ -32,35 +100,161 @@ export async function attemptBooking(config: Config): Promise<BookingResult> {
 
     console.log("[booker] Navigating to booking page...");
     await page.goto(BOOKING_URL, { waitUntil: "networkidle2", timeout: 30000 });
+    console.log(`[booker] Landed on: ${page.url()}`);
 
-    // Step 1: Select appointment type — samordningsnummer
-    await page.waitForSelector("select", { timeout: 10000 });
-    await page.select(
-      "select",
-      // The option value may be numeric; we find it by visible text
-      await page.evaluate(() => {
-        const opts = Array.from(document.querySelectorAll("option"));
-        const match = opts.find((o) =>
+    await dumpSelects(page, "Initial selects");
+
+    // ── Step 1a: Commit embassy selection ──────────────────────────
+    // The URL pre-selects London (enhet=U0586) in the HTML, but Wicket's
+    // server-side model may still hold a default.  Fire the change event
+    // to sync server state — Wicket will AJAX-replace parts of the form.
+    await page.waitForSelector("#mottagningsenhet", { timeout: 10000 });
+    const embassyValue = await page.$eval(
+      "#mottagningsenhet",
+      (el) => (el as HTMLSelectElement).value
+    );
+    console.log(`[booker] Committing embassy: "${embassyValue}"`);
+    await wicketSelect(page, "#mottagningsenhet", embassyValue);
+
+    await dumpSelects(page, "After embassy AJAX");
+
+    // ── Step 1b: Select appointment type (samordningsnummer) ──────
+    // IMPORTANT: Re-query the DOM *after* embassy AJAX — Wicket may have
+    // replaced the appointment type <select> with new options.
+    const appointmentInfo = await page.evaluate(() => {
+      const selects = Array.from(document.querySelectorAll("select"));
+      for (const sel of selects) {
+        if (sel.id === "mottagningsenhet") continue; // skip embassy dropdown
+        const match = Array.from(sel.options).find((o) =>
           o.textContent?.toLowerCase().includes("samordningsnummer")
         );
-        return match?.value ?? "";
-      })
-    );
+        if (match) {
+          return { value: match.value, selector: sel.id ? `#${sel.id}` : `select[name="${sel.name}"]` };
+        }
+      }
+      return null;
+    });
 
-    // Step 2: Tick the confirmation checkbox
-    const checkbox = await page.$("input[type='checkbox']");
-    if (checkbox) {
-      const checked = await page.evaluate((el) => (el as HTMLInputElement).checked, checkbox);
-      if (!checked) await checkbox.click();
+    if (!appointmentInfo) {
+      const html = await page.evaluate(() => document.body.innerHTML.slice(0, 2000));
+      console.log(`[booker] Cannot find samordningsnummer option after embassy AJAX. HTML:\n${html}`);
+      return { status: "error", message: "samordningsnummer option not found" };
     }
 
-    // Step 3: Click Next / Submit
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: "networkidle2", timeout: 20000 }),
-      page.click("input[type='submit'], button[type='submit']"),
-    ]);
+    console.log(`[booker] Selecting appointment type: "${appointmentInfo.value}" via "${appointmentInfo.selector}"`);
+    await wicketSelect(page, appointmentInfo.selector, appointmentInfo.value);
 
-    // Step 4: Check calendar for available slots
+    await dumpSelects(page, "After appointment type AJAX");
+
+    // Verify the selection stuck
+    const appointmentStuck = await page.evaluate((sel: string, val: string) => {
+      const el = document.querySelector(sel) as HTMLSelectElement | null;
+      return el?.value === val;
+    }, appointmentInfo.selector, appointmentInfo.value);
+    console.log(`[booker] Appointment type selection stuck: ${appointmentStuck}`);
+
+    // ── Step 1c: Set antal personer (number of people) ────────────
+    // This field appears via AJAX after selecting the appointment type.
+    // It may be a <select> or an <input>.
+    const antalSet = await page.evaluate((n: number) => {
+      // Try select first
+      const selects = Array.from(document.querySelectorAll("select"));
+      for (const sel of selects) {
+        if (sel.id === "mottagningsenhet") continue;
+        const hasAntal = sel.id?.toLowerCase().includes("antal") ||
+          sel.name?.toLowerCase().includes("antal") ||
+          sel.closest("div, label, span")?.textContent?.toLowerCase().includes("antal");
+        if (hasAntal) {
+          sel.value = String(n);
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+          if (typeof sel.onchange === "function") sel.onchange(new Event("change"));
+          return { type: "select", id: sel.id, value: sel.value };
+        }
+      }
+      // Try input
+      const inputs = Array.from(document.querySelectorAll("input"));
+      for (const inp of inputs) {
+        const hasAntal = inp.id?.toLowerCase().includes("antal") ||
+          inp.name?.toLowerCase().includes("antal") ||
+          inp.closest("div, label, span")?.textContent?.toLowerCase().includes("antal");
+        if (hasAntal && (inp.type === "number" || inp.type === "text")) {
+          inp.value = String(n);
+          inp.dispatchEvent(new Event("change", { bubbles: true }));
+          inp.dispatchEvent(new Event("input", { bubbles: true }));
+          return { type: "input", id: inp.id, value: inp.value };
+        }
+      }
+      return null;
+    }, config.booking.numberOfPeople);
+
+    if (antalSet) {
+      console.log(`[booker] Set antal personer: ${JSON.stringify(antalSet)}`);
+      await page.waitForNetworkIdle({ timeout: 5000 }).catch(() => {});
+    } else {
+      console.log("[booker] No antal personer field found — may not be required");
+    }
+
+    // ── Step 2: Tick confirmation checkbox ─────────────────────────
+    const checkboxTicked = await page.evaluate(() => {
+      const cb = document.querySelector("input[type='checkbox']") as HTMLInputElement | null;
+      if (!cb) return null;
+      if (!cb.checked) {
+        cb.checked = true;
+        cb.dispatchEvent(new Event("change", { bubbles: true }));
+        cb.dispatchEvent(new Event("click", { bubbles: true }));
+      }
+      return cb.checked;
+    });
+    console.log(`[booker] Checkbox: ${checkboxTicked === null ? "not found" : checkboxTicked}`);
+
+    // Debug screenshot before submitting
+    const preSubmitPath = path.join(screenshotDir, `debug-pre-submit-${Date.now()}.png`);
+    await page.screenshot({ path: preSubmitPath, fullPage: true });
+    console.log(`[booker] Pre-submit screenshot: ${preSubmitPath}`);
+
+    // ── Step 3: Submit the form ───────────────────────────────────
+    // Find the submit button/link and click it.  Wicket forms often
+    // use a plain <input type="submit"> but may also use <button> or <a>.
+    console.log("[booker] Clicking Fortsätt...");
+
+    // Try to submit via Wicket's form submission mechanism directly
+    const submitted = await page.evaluate(() => {
+      // First try: find submit button and click it natively
+      const btn = document.querySelector(
+        "input[type='submit'], button[type='submit'], input[value*='ortsätt']"
+      ) as HTMLElement | null;
+      if (btn) {
+        btn.click();
+        return "clicked-button";
+      }
+      // Second try: submit the form directly
+      const form = document.querySelector("form") as HTMLFormElement | null;
+      if (form) {
+        form.submit();
+        return "form-submit";
+      }
+      return null;
+    });
+
+    if (!submitted) {
+      const html = await page.evaluate(() => document.body.innerHTML.slice(0, 1500));
+      console.log(`[booker] Could not submit form. HTML:\n${html}`);
+      return { status: "error", message: "Submit mechanism not found" };
+    }
+    console.log(`[booker] Form submitted via: ${submitted}`);
+
+    // Wait for navigation or AJAX response
+    await page.waitForNetworkIdle({ timeout: 20000, idleTime: 1500 });
+    console.log(`[booker] After submit, URL: ${page.url()}`);
+
+    // Debug: take a screenshot to see what page we landed on
+    const debugPath = path.join(screenshotDir, `debug-after-fortsatt-${Date.now()}.png`);
+    await page.screenshot({ path: debugPath, fullPage: true });
+    console.log(`[booker] Post-submit screenshot: ${debugPath}`);
+
+    // ── Step 4: Check calendar for available slots ────────────────
+    const bodyText = await page.evaluate(() => document.body.innerText.slice(0, 600));
+    console.log(`[booker] Page text preview:\n${bodyText}\n---`);
     if (await hasNoSlotsMessage(page)) {
       console.log("[booker] No slots available on calendar page.");
       return { status: "no_slots" };
@@ -72,7 +266,7 @@ export async function attemptBooking(config: Config): Promise<BookingResult> {
       return { status: "no_slots" };
     }
 
-    console.log(`[booker] Slot found! Clicking: ${slotSelector}`);
+    console.log(`[booker] Slot found! Clicking selector: ${slotSelector}`);
     await Promise.all([
       page.waitForNavigation({ waitUntil: "networkidle2", timeout: 20000 }),
       page.click(slotSelector),
