@@ -1,18 +1,13 @@
-jest.mock("node-notifier", () => ({
-  notify: jest.fn(),
-}));
-
-const mockSendMail = jest.fn().mockResolvedValue(undefined);
-jest.mock("nodemailer", () => ({
-  createTransport: jest.fn().mockReturnValue({
-    sendMail: mockSendMail,
-  }),
-}));
-
-import notifier from "node-notifier";
-import nodemailer from "nodemailer";
+import https from "https";
+import fs from "fs";
 import { notify } from "./notifier";
 import type { Config } from "./config";
+
+jest.mock("https");
+jest.mock("fs");
+
+const mockHttps = https as jest.Mocked<typeof https>;
+const mockFs = fs as jest.Mocked<typeof fs>;
 
 const baseConfig: Config = {
   personal: {
@@ -23,14 +18,9 @@ const baseConfig: Config = {
     phone: "0700000000",
   },
   notification: {
-    smtp: { host: "smtp.test.se", port: 587, user: "user", pass: "pass" },
-    to: "recipient@example.com",
+    telegram: { botToken: "123:ABC", chatId: "456" },
   },
-  booking: {
-    unitCode: "U0586",
-    appointmentType: "samordningsnummer",
-    numberOfPeople: 1,
-  },
+  booking: { unitCode: "U0586", appointmentType: "samordningsnummer", numberOfPeople: 1 },
   polling: {
     sniperIntervalSec: 5,
     normalIntervalMin: 30,
@@ -40,75 +30,72 @@ const baseConfig: Config = {
   },
 };
 
+function mockHttpsRequest(statusCode = 200) {
+  const mockRes = {
+    statusCode,
+    resume: jest.fn(),
+    on: jest.fn((event: string, cb: () => void) => {
+      if (event === "end") cb();
+    }),
+  };
+  const mockReq = { on: jest.fn(), write: jest.fn(), end: jest.fn() };
+  (mockHttps.request as jest.Mock).mockImplementation((_opts: unknown, cb: (res: unknown) => void) => {
+    cb(mockRes);
+    return mockReq;
+  });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFs.existsSync.mockReturnValue(false); // no screenshot by default
 });
 
-describe("notifier", () => {
-  describe("notify", () => {
-    it("sends a desktop notification with correct title and message", async () => {
-      await notify(baseConfig, "Test Subject", "Test Body");
-      expect(notifier.notify).toHaveBeenCalledWith({
-        title: "ambassad-timer",
-        message: "Test Subject",
-        sound: true,
-        wait: false,
-      });
-    });
+describe("notify", () => {
+  it("calls Telegram sendMessage endpoint", async () => {
+    mockHttpsRequest();
+    await notify(baseConfig, "Test Subject", "Test Body");
+    expect(mockHttps.request).toHaveBeenCalledWith(
+      expect.objectContaining({ hostname: "api.telegram.org" }),
+      expect.any(Function)
+    );
+  });
 
-    it("creates nodemailer transporter with correct SMTP config", async () => {
-      await notify(baseConfig, "Test Subject", "Test Body");
-      expect(nodemailer.createTransport).toHaveBeenCalledWith({
-        host: "smtp.test.se",
-        port: 587,
-        secure: false,
-        auth: {
-          user: "user",
-          pass: "pass",
-        },
-      });
-    });
+  it("sends to the correct bot token path", async () => {
+    mockHttpsRequest();
+    await notify(baseConfig, "Test Subject", "Test Body");
+    const callArgs = mockHttps.request.mock.calls[0]?.[0] as unknown as { path: string };
+    expect(callArgs.path).toContain("123:ABC");
+    expect(callArgs.path).toContain("sendMessage");
+  });
 
-    it("sends email with correct from, to, subject and text", async () => {
-      await notify(baseConfig, "Test Subject", "Test Body");
-      const sendMail = nodemailer.createTransport().sendMail;
-      expect(sendMail).toHaveBeenCalledWith({
-        from: "user",
-        to: "recipient@example.com",
-        subject: "Test Subject",
-        text: "Test Body",
-      });
-    });
+  it("includes chat_id and text in the request body", async () => {
+    mockHttpsRequest();
+    await notify(baseConfig, "Test Subject", "Test Body");
+    const mockReq = (mockHttps.request as jest.Mock).mock.results[0]?.value as { write: jest.Mock };
+    const body = mockReq.write.mock.calls[0]?.[0] as string;
+    expect(body).toContain("456"); // chat_id
+    expect(body).toContain("Test%20Subject"); // encoded in body
+  });
 
-    it("does not include attachments when screenshotPath is not provided", async () => {
-      await notify(baseConfig, "Test Subject", "Test Body");
-      const sendMail = nodemailer.createTransport().sendMail;
-      expect(sendMail).toHaveBeenCalledWith(
-        expect.not.objectContaining({ attachments: expect.anything() })
-      );
-    });
+  it("logs confirmation to console", async () => {
+    mockHttpsRequest();
+    const spy = jest.spyOn(console, "log").mockImplementation(() => {});
+    await notify(baseConfig, "Subject", "Body");
+    expect(spy).toHaveBeenCalledWith("[notifier] Telegram message sent to chat 456");
+    spy.mockRestore();
+  });
 
-    it("includes screenshot attachment when screenshotPath is provided", async () => {
-      await notify(baseConfig, "Test Subject", "Test Body", "/path/to/screenshot.png");
-      const sendMail = nodemailer.createTransport().sendMail;
-      expect(sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          attachments: [{ filename: "confirmation.png", path: "/path/to/screenshot.png" }],
-        })
-      );
-    });
+  it("throws when Telegram returns a non-2xx status", async () => {
+    mockHttpsRequest(429); // rate limited
+    await expect(notify(baseConfig, "S", "B")).rejects.toThrow("429");
+  });
 
-    it("logs email sent message to console", async () => {
-      const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {});
-      await notify(baseConfig, "Test Subject", "Test Body");
-      expect(consoleSpy).toHaveBeenCalledWith("[notifier] Email sent to recipient@example.com");
-      consoleSpy.mockRestore();
-    });
-
-    it("awaits sendMail completion", async () => {
-      const sendMail = nodemailer.createTransport().sendMail as jest.Mock;
-      sendMail.mockResolvedValue(undefined);
-      await expect(notify(baseConfig, "Test Subject", "Test Body")).resolves.toBeUndefined();
-    });
+  it("uses sendPhoto when screenshotPath exists", async () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue(Buffer.from("fake-png-data"));
+    mockHttpsRequest();
+    await notify(baseConfig, "Subject", "Body", "/tmp/screenshot.png");
+    const callArgs = mockHttps.request.mock.calls[0]?.[0] as unknown as { path: string };
+    expect(callArgs.path).toContain("sendPhoto");
   });
 });

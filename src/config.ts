@@ -10,13 +10,10 @@ export interface Config {
     phone: string;
   };
   notification: {
-    smtp: {
-      host: string;
-      port: number;
-      user: string;
-      pass: string;
+    telegram: {
+      botToken: string;
+      chatId: string;
     };
-    to: string;
   };
   booking: {
     unitCode: string;

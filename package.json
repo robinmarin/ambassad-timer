@@ -29,8 +29,6 @@
     "@types/jsdom": "^28.0.1",
     "@types/node": "^25.6.0",
     "@types/node-cron": "^3.0.11",
-    "@types/node-notifier": "^8.0.5",
-    "@types/nodemailer": "^8.0.0",
     "jest": "^30.3.0",
     "jsdom": "^29.0.2",
     "ts-jest": "^29.4.9",
@@ -39,8 +37,6 @@
   },
   "dependencies": {
     "node-cron": "^4.2.1",
-    "node-notifier": "^10.0.1",
-    "nodemailer": "^8.0.5",
     "puppeteer": "^24.41.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2"

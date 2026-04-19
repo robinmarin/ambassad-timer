@@ -30,8 +30,7 @@ const baseConfig: Config = {
     phone: "0700000000",
   },
   notification: {
-    smtp: { host: "smtp.test.se", port: 587, user: "user", pass: "pass" },
-    to: "test@example.com",
+    telegram: { botToken: "123:ABC", chatId: "456" },
   },
   booking: {
     unitCode: "U0586",

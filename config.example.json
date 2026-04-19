@@ -7,13 +7,10 @@
     "phone": ""
   },
   "notification": {
-    "smtp": {
-      "host": "smtp.gmail.com",
-      "port": 587,
-      "user": "",
-      "pass": ""
-    },
-    "to": ""
+    "telegram": {
+      "botToken": "123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "chatId": "your-chat-id"
+    }
   },
   "booking": {
     "unitCode": "U0586",

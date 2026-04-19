@@ -15,13 +15,7 @@ describe("config.ts", () => {
       phone: "+46123456789",
     },
     notification: {
-      smtp: {
-        host: "smtp.example.com",
-        port: 587,
-        user: "user",
-        pass: "pass",
-      },
-      to: "notify@example.com",
+      telegram: { botToken: "123:ABC", chatId: "456" },
     },
     booking: {
       unitCode: "UNIT123",

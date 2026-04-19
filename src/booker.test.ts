@@ -15,7 +15,7 @@ const mockConfig: Config = {
     email: "john@example.com",
     phone: "+46123456789",
   },
-  notification: { smtp: { host: "smtp", port: 587, user: "u", pass: "p" }, to: "t@t.com" },
+  notification: { telegram: { botToken: "123:ABC", chatId: "456" } },
   booking: { unitCode: "U0586", appointmentType: "samordning", numberOfPeople: 1 },
   polling: {
     sniperIntervalSec: 30,

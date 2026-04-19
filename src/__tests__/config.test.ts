@@ -8,7 +8,7 @@ const mockFs = fs as jest.Mocked<typeof fs>;
 
 const validConfig = {
   personal: { firstName: "A", lastName: "B", personnummer: "19900101-1234", email: "a@b.com", phone: "+441234" },
-  notification: { smtp: { host: "smtp.example.com", port: 587, user: "u", pass: "p" }, to: "a@b.com" },
+  notification: { telegram: { botToken: "123:ABC", chatId: "456" } },
   booking: { unitCode: "U0586", appointmentType: "samordningsnummer", numberOfPeople: 1 },
   polling: { sniperIntervalSec: 25, normalIntervalMin: 10, sniperWindowStartHour: 9, sniperWindowEndHour: 11, sniperDayOfWeek: 3 },
 };
