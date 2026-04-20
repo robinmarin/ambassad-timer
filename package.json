@@ -7,6 +7,7 @@
     "build": "tsc",
     "start": "ts-node src/index.ts",
     "start:prod": "npm run build && node dist/index.js",
+    "manual": "ts-node src/manual.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
