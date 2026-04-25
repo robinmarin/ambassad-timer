@@ -8,6 +8,8 @@
     "start": "ts-node src/index.ts",
     "start:prod": "npm run build && node dist/index.js",
     "manual": "ts-node src/manual.ts",
+    "test:notify": "ts-node src/test-notify.ts",
+    "test:notify-photo": "ts-node src/test-notify-photo.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"

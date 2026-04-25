@@ -97,24 +97,21 @@ async function main() {
   log("Step 7/10: Calendar check complete.");
   await prompt("Step 7/10 done. Press Enter to click slot...\n");
 
-  // Step 8: Click slot
+  // Step 8: Click slot (skip if none found — still test contact form fill)
   if (!slotSelector) {
-    log("Step 8/10: No slot available. Skipping...");
-    await prompt("No slots found. Press Enter to close browser...\n");
-    await browser.close();
-    log("Done. Browser closed.");
-    return;
-  }
-  await clickSlot(page, slotSelector, log);
-  await screenshot("8-slot-clicked");
-  log("Step 8/10: Slot clicked.");
-  await prompt("Step 8/10 done. Press Enter to pick time...\n");
+    log("Step 8/10: No slot available — skipping slot click and time pick. Proceeding to contact info for testing.");
+  } else {
+    await clickSlot(page, slotSelector, log);
+    await screenshot("8-slot-clicked");
+    log("Step 8/10: Slot clicked.");
+    await prompt("Step 8/10 done. Press Enter to pick time...\n");
 
-  // Step 9: Pick time slot
-  await pickTimeSlot(page, log);
-  await screenshot("9-time-picked");
-  log("Step 9/10: Time slot picked.");
-  await prompt("Step 9/10 done. Press Enter to fill contact info...\n");
+    // Step 9: Pick time slot
+    await pickTimeSlot(page, log);
+    await screenshot("9-time-picked");
+    log("Step 9/10: Time slot picked.");
+    await prompt("Step 9/10 done. Press Enter to fill contact info...\n");
+  }
 
   // Step 10: Fill contact info
   await fillContactInfo(page, config, log);

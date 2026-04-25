@@ -229,7 +229,6 @@ export async function fillContactInfo(page: Page, config: Config, log: LogFn = d
     { selector: "input[name*='firstName'], input[id*='firstName']", value: config.personal.firstName },
     { selector: "input[name*='lastName'], input[id*='lastName']", value: config.personal.lastName },
     { selector: "input[name*='personnummer'], input[id*='personnr']", value: config.personal.personnummer },
-    { selector: "input[type='email'], input[name*='email']", value: config.personal.email },
     { selector: "input[type='tel'], input[name*='phone'], input[name*='telefon']", value: config.personal.phone },
   ];
   for (const field of fields) {
@@ -241,6 +240,14 @@ export async function fillContactInfo(page: Page, config: Config, log: LogFn = d
     } else {
       log(`[steps] Field not found: ${field.selector}`);
     }
+  }
+  // Fill all email inputs (handles both e-post and "fyll i e-post igen")
+  const emailEls = await page.$$("input[type='email'], input[name*='email'], input[id*='email']");
+  for (const el of emailEls) {
+    await el.click({ clickCount: 3 });
+    await el.type(config.personal.email, { delay: 40 });
+    const fieldName = await el.evaluate((n) => (n as HTMLInputElement).name || (n as HTMLInputElement).id);
+    log(`[steps] Filled email field: ${fieldName}`);
   }
 }
 

@@ -129,6 +129,11 @@ export async function attemptBooking(config: Config): Promise<BookingResult> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[booker] Error: ${message}`);
+    try {
+      await notify(config, "Ambassad-timer: booking error", `An error occurred during booking:\n\n${message}`);
+    } catch {
+      // notification failure is secondary — don't mask the original error
+    }
     return { status: "error", message };
   } finally {
     await browser.close();

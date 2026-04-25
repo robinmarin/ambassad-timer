@@ -15,10 +15,12 @@ function post(url: string, body: string, contentType: string): Promise<void> {
         headers: { "Content-Type": contentType, "Content-Length": Buffer.byteLength(body) },
       },
       (res) => {
-        res.resume();
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(chunk));
         res.on("end", () => {
+          const responseBody = Buffer.concat(chunks).toString();
           if (!res.statusCode || res.statusCode >= 300) {
-            reject(new Error(`Telegram API returned ${res.statusCode}`));
+            reject(new Error(`Telegram API returned ${res.statusCode}: ${responseBody}`));
           } else {
             resolve();
           }
