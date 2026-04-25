@@ -23,7 +23,7 @@ import {
 puppeteer.use(StealthPlugin());
 
 export type BookingResult =
-  | { status: "booked"; reference: string; screenshotPath: string }
+  | { status: "booked"; reference: string; screenshotPath?: string }
   | { status: "no_slots" }
   | { status: "error"; message: string };
 
@@ -66,8 +66,12 @@ export async function attemptBooking(config: Config): Promise<BookingResult> {
 
     // Debug screenshot before submitting
     const preSubmitPath = path.join(screenshotDir, `debug-pre-submit-${Date.now()}.png`);
-    await page.screenshot({ path: preSubmitPath, fullPage: true });
-    log(`Pre-submit screenshot: ${preSubmitPath}`);
+    try {
+      await page.screenshot({ path: preSubmitPath, fullPage: true });
+      log(`Pre-submit screenshot: ${preSubmitPath}`);
+    } catch (ssErr) {
+      log(`Pre-submit screenshot failed (non-fatal): ${ssErr instanceof Error ? ssErr.message : ssErr}`);
+    }
 
     // Step 5: Click Fortsätt (with navigation wait)
     log("Clicking Fortsätt...");
@@ -77,8 +81,12 @@ export async function attemptBooking(config: Config): Promise<BookingResult> {
     ]);
 
     const debugPath = path.join(screenshotDir, `debug-after-fortsatt-${Date.now()}.png`);
-    await page.screenshot({ path: debugPath, fullPage: true });
-    log(`Post-submit screenshot: ${debugPath}`);
+    try {
+      await page.screenshot({ path: debugPath, fullPage: true });
+      log(`Post-submit screenshot: ${debugPath}`);
+    } catch (ssErr) {
+      log(`Post-submit screenshot failed (non-fatal): ${ssErr instanceof Error ? ssErr.message : ssErr}`);
+    }
     log(`After submit, URL: ${page.url()}`);
 
     // Step 6: Check calendar
@@ -109,7 +117,13 @@ export async function attemptBooking(config: Config): Promise<BookingResult> {
 
     // Capture confirmation
     const screenshotPath = path.join(screenshotDir, `confirmation-${Date.now()}.png`);
-    await page.screenshot({ path: screenshotPath, fullPage: true });
+    let capturedScreenshot: string | undefined;
+    try {
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+      capturedScreenshot = screenshotPath;
+    } catch (ssErr) {
+      log(`Confirmation screenshot failed (non-fatal): ${ssErr instanceof Error ? ssErr.message : ssErr}`);
+    }
 
     const pageText = await page.evaluate(() => document.body.innerText);
     const refMatch = pageText.match(/[A-Z0-9]{6,20}/);
@@ -120,12 +134,12 @@ export async function attemptBooking(config: Config): Promise<BookingResult> {
       config,
       `Ambassad-timer: BOOKED! Ref ${reference}`,
       `Your samordningsnummer appointment has been booked.\n\nReference: ${reference}\n\nFull confirmation attached.`,
-      screenshotPath
+      capturedScreenshot
     );
 
     await new Promise((r) => setTimeout(r, 5000));
 
-    return { status: "booked", reference, screenshotPath };
+    return { status: "booked", reference, screenshotPath: capturedScreenshot };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[booker] Error: ${message}`);
